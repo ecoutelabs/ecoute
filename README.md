@@ -22,8 +22,8 @@ Last.fm (optional):
 CLI (unsigned local build):
 ```bash
 cd MusicPlayer
-xcodebuild -scheme MusicPlayer -configuration Release -destination 'generic/platform=macOS' build
-cp build/Build/Products/Release/MusicPlayer.app /Applications/
+xcodebuild -scheme Ecoute -configuration Release -destination 'generic/platform=macOS' build
+cp build/Build/Products/Release/Ecoute.app /Applications/
 ```
 First launch will require “Right-click → Open” (or Privacy & Security → Open Anyway).
 
