@@ -3,7 +3,8 @@ import SwiftUI
 struct SearchView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @EnvironmentObject private var playback: PlaybackState
-    @State private var query: String = ""
+    /// Driven by the search field in the window toolbar.
+    let query: String
 
     private let albumColumns = [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 20)]
 
@@ -13,9 +14,6 @@ struct SearchView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            searchBar
-            Divider()
-
             if query.isEmpty {
                 emptyPrompt
             } else if albumResults.isEmpty && artistResults.isEmpty && trackResults.isEmpty {
@@ -24,27 +22,6 @@ struct SearchView: View {
                 results
             }
         }
-    }
-
-    // MARK: - Search bar
-
-    private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search library", text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 15))
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
     }
 
     // MARK: - Results

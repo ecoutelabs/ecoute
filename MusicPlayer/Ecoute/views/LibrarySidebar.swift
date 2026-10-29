@@ -25,12 +25,21 @@ struct LibrarySidebar: View {
                 ) {
                     viewModel.selectSection(.search)
                 }
+
+                SidebarRow(
+                    label: "Home",
+                    icon: "house",
+                    isSelected: viewModel.selectedSection == .home,
+                    accent: accent
+                ) {
+                    viewModel.selectSection(.home)
+                }
             }
 
             Section("Library") {
                 SidebarRow(
                     label: "Albums",
-                    icon: "square.grid.2x2",
+                    icon: "square.stack",
                     isSelected: viewModel.selectedSection == .albums,
                     accent: accent
                 ) {
@@ -48,7 +57,7 @@ struct LibrarySidebar: View {
 
                 SidebarRow(
                     label: "Songs",
-                    icon: "music.note.list",
+                    icon: "music.note",
                     isSelected: viewModel.selectedSection == .songs,
                     accent: accent
                 ) {
@@ -80,13 +89,15 @@ private struct SidebarRow: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.title3)
+                    .foregroundStyle(accent)
+                    .frame(width: 24)
                 Text(label)
-                    .font(.body)
+                    .font(.body.weight(isSelected ? .semibold : .regular))
+                    .foregroundStyle(.primary)
             }
-            .foregroundStyle(isSelected ? accent : Color.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }

@@ -9,10 +9,12 @@ struct GenreBrowserView: View {
             items: viewModel.allGenres(),
             selectedItem: viewModel.selectedGenre,
             onSelectItem: { viewModel.selectedGenre = $0 },
-            isItemPlaying: { _ in false },
+            isItemPlaying: { viewModel.currentAlbum?.genres.contains($0) ?? false },
             albumsForItem: { viewModel.albumsForGenre($0) },
             currentAlbumID: viewModel.currentAlbum?.id,
             onSelectAlbum: { viewModel.selectBrowsingAlbum($0) },
+            onPlayAlbum: { viewModel.play(album: $0) },
+            thumbnailStyle: .mosaic,
             filterText: filterText
         )
     }

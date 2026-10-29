@@ -15,7 +15,7 @@ final class PlaybackState: ObservableObject {
 }
 
 enum LibrarySection: Equatable {
-    case albums, artists, songs, genres, search
+    case home, albums, artists, songs, genres, search
 }
 
 @MainActor
@@ -27,13 +27,20 @@ final class AppViewModel: ObservableObject {
     @Published var foregroundColor: Color = .white
     @Published var artists: [String] = []
     @Published var libraryPath: String?
-    @Published var selectedSection: LibrarySection = .albums
+    @Published var selectedSection: LibrarySection = .home
     @Published var browsingAlbum: Album?
     @Published var browsingAlbumAccentColorDark: Color?
     @Published var browsingAlbumAccentColorLight: Color?
     @Published var selectedArtist: String?
     @Published var selectedGenre: String?
     @Published var isNowPlayingExpanded: Bool = false
+    @Published var isCommandPaletteVisible: Bool = false
+    /// Most recently played albums, newest first, as stable keys (album IDs change
+    /// every launch). Persisted across launches.
+    @Published private(set) var recentAlbumKeys: [String] =
+        UserDefaults.standard.stringArray(forKey: "recentAlbumKeys") ?? []
+    /// When each album was added to the library folder, for Home's Recently Added.
+    @Published private(set) var albumAddedDates: [UUID: Date] = [:]
     @Published var isNightMode: Bool = UserDefaults.standard.bool(forKey: "isNightMode") {
         didSet { UserDefaults.standard.set(isNightMode, forKey: "isNightMode") }
     }
@@ -148,6 +155,11 @@ final class AppViewModel: ObservableObject {
         }
         currentAlbum = album
         currentTrackIndex = trackIndex
+        let key = Self.stableKey(for: album)
+        recentAlbumKeys.removeAll { $0 == key }
+        recentAlbumKeys.insert(key, at: 0)
+        if recentAlbumKeys.count > 12 { recentAlbumKeys.removeLast() }
+        UserDefaults.standard.set(recentAlbumKeys, forKey: "recentAlbumKeys")
         playback.position = 0
         guard let track = album.tracks[safe: trackIndex] else { return }
         playback.duration = track.duration
@@ -290,7 +302,7 @@ final class AppViewModel: ObservableObject {
                 }
                 self.selectedArtist = nil
                 self.selectedGenre = nil
-                self.selectedSection = .albums
+                self.selectedSection = .home
                 self.browsingAlbum = nil
                 self.browsingAlbumAccentColorDark = nil
                 self.browsingAlbumAccentColorLight = nil
@@ -302,6 +314,7 @@ final class AppViewModel: ObservableObject {
                 self.libraryPath = url.path
             }
             enrichWithGenres(albums)
+            loadAddedDates(for: albums)
         } catch {
             print("Failed to load album: \(error)")
         }
@@ -430,6 +443,43 @@ final class AppViewModel: ObservableObject {
         browsingAlbum = nil
         browsingAlbumAccentColorDark = nil
         browsingAlbumAccentColorLight = nil
+    }
+
+    var recentAlbums: [Album] {
+        let byKey = Dictionary(library.map { (Self.stableKey(for: $0), $0) }, uniquingKeysWith: { first, _ in first })
+        return recentAlbumKeys.compactMap { byKey[$0] }
+    }
+
+    var recentlyAddedAlbums: [Album] {
+        library
+            .filter { albumAddedDates[$0.id] != nil }
+            .sorted { albumAddedDates[$0.id]! > albumAddedDates[$1.id]! }
+    }
+
+    /// Genres with the most albums, most first.
+    func topGenres(limit: Int) -> [String] {
+        var counts: [String: Int] = [:]
+        for genre in library.flatMap(\.genres) { counts[genre, default: 0] += 1 }
+        return counts.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
+    }
+
+    static func stableKey(for album: Album) -> String {
+        album.musicBrainzAlbumID ?? "\(album.artist)\u{1F}\(album.title)"
+    }
+
+    /// Reads each album folder's added date off the main thread.
+    private func loadAddedDates(for albums: [Album]) {
+        let urls = albums.compactMap { album in album.tracks.first.map { (album.id, $0.url) } }
+        Task.detached(priority: .utility) {
+            var dates: [UUID: Date] = [:]
+            for (id, url) in urls {
+                let values = try? url.resourceValues(forKeys: [.addedToDirectoryDateKey, .creationDateKey])
+                if let date = values?.addedToDirectoryDate ?? values?.creationDate {
+                    dates[id] = date
+                }
+            }
+            await MainActor.run { self.albumAddedDates = dates }
+        }
     }
 
     func navigateToArtist(_ artist: String) {

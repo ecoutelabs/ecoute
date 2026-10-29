@@ -4,9 +4,12 @@ import AppKit
 struct ViewFilterField: NSViewRepresentable {
     @Binding var text: String
     var prompt: String
+    /// Takes keyboard focus as soon as the field appears in a window.
+    var focusOnAppear = false
 
     func makeNSView(context: Context) -> NSSearchField {
-        let field = NSSearchField()
+        let field = FocusingSearchField()
+        field.focusOnAppear = focusOnAppear
         field.placeholderString = prompt
         field.delegate = context.coordinator
         field.sendsSearchStringImmediately = true
@@ -31,5 +34,15 @@ struct ViewFilterField: NSViewRepresentable {
             guard let field = notification.object as? NSSearchField else { return }
             text.wrappedValue = field.stringValue
         }
+    }
+}
+
+private final class FocusingSearchField: NSSearchField {
+    var focusOnAppear = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard focusOnAppear, let window else { return }
+        DispatchQueue.main.async { window.makeFirstResponder(self) }
     }
 }

@@ -5,22 +5,33 @@ import Combine
 struct ContentView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @EnvironmentObject private var playback: PlaybackState
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var windowDelegate = FullscreenHidingWindowDelegate()
-    @State private var spacebarHandler: SpacebarToggleManager?
+    @State private var keyShortcuts: SingleKeyShortcuts?
+    @State private var searchQuery = ""
     @StateObject private var idleManager = IdleManager()
     @State private var fullCoverCenter: CGPoint = .zero
     @State private var filterText: String = ""
 
     // Whether the per-section filter toolbar is relevant
     private var showFilterBar: Bool {
+        showsTitle && viewModel.selectedSection != .home
+    }
+
+    private var showsTitle: Bool {
         !viewModel.isNowPlayingExpanded
             && viewModel.browsingAlbum == nil
             && viewModel.selectedSection != .search
     }
 
+    private var showSearchBar: Bool {
+        !viewModel.isNowPlayingExpanded
+            && viewModel.browsingAlbum == nil
+            && viewModel.selectedSection == .search
+    }
+
     private var sectionTitle: String {
         switch viewModel.selectedSection {
+        case .home:    "Home"
         case .albums:  "Albums"
         case .artists: "Artists"
         case .songs:   "Songs"
@@ -31,6 +42,7 @@ struct ContentView: View {
 
     private var filterPrompt: String {
         switch viewModel.selectedSection {
+        case .home:    ""
         case .albums:  "Find in Albums"
         case .artists: "Find in Artists"
         case .songs:   "Find in Songs"
@@ -48,27 +60,26 @@ struct ContentView: View {
         }
     }
 
+    private func toggleNowPlaying() {
+        guard viewModel.currentAlbum != nil else { return }
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            viewModel.isNowPlayingExpanded.toggle()
+        }
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
-            NavigationSplitView(columnVisibility: $columnVisibility) {
+            NavigationSplitView(columnVisibility: .constant(.all)) {
                 LibrarySidebar()
                     .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 320)
                     .scrollEdgeEffectStyle(.soft, for: .top)
+                    .toolbar(removing: .sidebarToggle)
             } detail: {
-                VStack(spacing: 0) {
-                    if showFilterBar {
-                        HStack {
-                            Text(sectionTitle)
-                                .font(.largeTitle.bold())
-                            Spacer()
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
-                        .padding(.bottom, 8)
-                    }
-                    contentArea
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                contentArea
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // A real window title is what makes macOS 27 draw the solid
+                    // strip under the toolbar when content scrolls beneath it.
+                    .navigationTitle(showsTitle ? sectionTitle : "")
             }
 
             // Floating pill mini player — always visible
@@ -85,17 +96,43 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(1)
             }
+
+            if viewModel.isCommandPaletteVisible {
+                Color.black.opacity(0.2)
+                    .ignoresSafeArea()
+                    .onTapGesture { viewModel.isCommandPaletteVisible = false }
+                    .transition(.opacity)
+                    .zIndex(2)
+                CommandPalette()
+                    .padding(.top, 90)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                    .zIndex(3)
+            }
         }
+        .animation(.easeOut(duration: 0.14), value: viewModel.isCommandPaletteVisible)
+        .frame(minWidth: 820, idealWidth: 1020, minHeight: 450, idealHeight: 760)
+        // No title-bar strip over now playing.
+        .toolbarBackgroundVisibility(
+            viewModel.isNowPlayingExpanded ? .hidden : .automatic,
+            for: .windowToolbar
+        )
         .background(WindowAccessor { window in
-            window?.delegate = windowDelegate
+            windowDelegate.install(on: window)
         })
-        .toolbar(removing: .sidebarToggle)
         .toolbar {
             if viewModel.isNowPlayingExpanded {
+                // Invisible placeholder: an empty toolbar disappears, which shifts the
+                // traffic lights. The back button is drawn in the overlay instead.
                 ToolbarItem(placement: .navigation) {
-                    Button(action: collapse) {
-                        Image(systemName: "chevron.left")
-                    }
+                    Color.clear.frame(width: 1, height: 1)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            }
+            if showSearchBar {
+                ToolbarItem(placement: .principal) {
+                    ViewFilterField(text: $searchQuery, prompt: "Search library", focusOnAppear: true)
+                        .frame(width: 360)
                 }
             }
             if showFilterBar {
@@ -115,11 +152,14 @@ struct ContentView: View {
             }
         }
         .onAppear {
-            spacebarHandler = SpacebarToggleManager { viewModel.togglePlayback() }
-            spacebarHandler?.start()
+            keyShortcuts = SingleKeyShortcuts(actions: [
+                " ": { viewModel.togglePlayback() },
+                "f": toggleNowPlaying,
+            ])
+            keyShortcuts?.start()
         }
         .onDisappear {
-            spacebarHandler?.stop()
+            keyShortcuts?.stop()
         }
         .preferredColorScheme(viewModel.isNightMode ? .dark : nil)
     }
@@ -132,6 +172,8 @@ struct ContentView: View {
             AlbumDetailView(album: album)
         } else {
             switch viewModel.selectedSection {
+            case .home:
+                HomeView()
             case .albums:
                 AlbumGridView(filterText: filterText)
             case .artists:
@@ -141,7 +183,7 @@ struct ContentView: View {
             case .genres:
                 GenreBrowserView(filterText: filterText)
             case .search:
-                SearchView()
+                SearchView(query: searchQuery)
             }
         }
     }
@@ -166,6 +208,7 @@ struct ContentView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: geo.size.height)
                 }
+                .scrollEdgeEffectHidden(true, for: .top)
             }
 
             // Idle-only cover. IdleCoverView initialises its internal @State position
@@ -219,6 +262,23 @@ struct ContentView: View {
                 .padding(.bottom, 40) // center text vertically on the cover
             }
             .allowsHitTesting(false)
+
+            // Back button in the top-left corner, beside the window controls, over
+            // where the sidebar sits underneath.
+            Button(action: collapse) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 32, height: 32)
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(in: .circle)
+            // Esc belongs to the command palette while it's open.
+            .keyboardShortcut(viewModel.isCommandPaletteVisible ? nil : .cancelAction)
+            .padding(.leading, 100)
+            .padding(.top, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .ignoresSafeArea()
         }
         .coordinateSpace(name: "nowPlayingViewport")
         .onPreferenceChange(CoverCenterKey.self) { fullCoverCenter = $0 }
@@ -290,18 +350,38 @@ private struct WindowAccessor: NSViewRepresentable {
     }
 }
 
+/// Wraps SwiftUI's own window delegate instead of replacing it — SwiftUI relies on
+/// its delegate for window sizing and frame restoration.
 private final class FullscreenHidingWindowDelegate: NSObject, NSWindowDelegate {
+    private var original: NSWindowDelegate?
+
+    func install(on window: NSWindow?) {
+        guard let window, window.delegate !== self else { return }
+        original = window.delegate
+        window.delegate = self
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        super.responds(to: aSelector) || (original?.responds(to: aSelector) ?? false)
+    }
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        if original?.responds(to: aSelector) == true { return original }
+        return super.forwardingTarget(for: aSelector)
+    }
+
     func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
         [.autoHideToolbar, .autoHideMenuBar, .fullScreen]
     }
 }
 
-private final class SpacebarToggleManager {
+/// Bare-key shortcuts (Space, F), ignored while typing in a text field.
+private final class SingleKeyShortcuts {
     private var monitor: Any?
-    private let onToggle: () -> Void
+    private let actions: [String: () -> Void]
 
-    init(onToggle: @escaping () -> Void) {
-        self.onToggle = onToggle
+    init(actions: [String: () -> Void]) {
+        self.actions = actions
     }
 
     func start() {
@@ -310,13 +390,14 @@ private final class SpacebarToggleManager {
             guard let self else { return event }
             let disallowed = event.modifierFlags.intersection([.command, .option, .control])
             guard disallowed.isEmpty else { return event }
-            guard event.charactersIgnoringModifiers == " " else { return event }
+            guard let key = event.charactersIgnoringModifiers,
+                  let action = self.actions[key] else { return event }
             if let responder = NSApp.keyWindow?.firstResponder {
                 if responder is NSTextView || responder is NSTextField {
                     return event
                 }
             }
-            onToggle()
+            action()
             return nil
         }
     }

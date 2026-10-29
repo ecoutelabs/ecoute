@@ -17,6 +17,8 @@ struct ArtistListView: View {
             albumsForItem: { viewModel.albumsForArtist($0) },
             currentAlbumID: viewModel.currentAlbum?.id,
             onSelectAlbum: { viewModel.selectBrowsingAlbum($0) },
+            onPlayAlbum: { viewModel.play(album: $0) },
+            thumbnailStyle: .circle,
             filterText: filterText
         )
     }
