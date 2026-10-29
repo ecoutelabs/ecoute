@@ -24,3 +24,17 @@ MusicPlayer/**/musicplayer.icon/
 # Logs
 *.log
 .sourcekit-lsp/
+
+# Build artifacts
+*.dmg
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
+
+# Local notes and experiments (not tracked)
+pythonexperimentation/
+design/
+PLANNED_FEATURES.md
+background-renderer.md
+metal-background-plan.md

@@ -6,8 +6,8 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Library") {
-                LabeledContent("Location") {
-                    VStack(alignment: .trailing, spacing: 4) {
+                LabeledContent {
+                    HStack(spacing: 8) {
                         Text(viewModel.libraryPath ?? "Not set")
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -15,29 +15,34 @@ struct SettingsView: View {
                         Button("Change…") {
                             viewModel.pickAlbumFolder()
                         }
-                        .controlSize(.small)
                     }
+                } label: {
+                    SettingsLabel("Location", icon: "folder.fill", color: .blue)
                 }
 
                 HStack(spacing: 8) {
+                    Spacer()
                     Button("Rescan") { viewModel.rescanLibrary() }
                     Button("Rescan & Clear Cache") { viewModel.rescanLibraryClearingCache() }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
 
             Section("Appearance") {
-                Toggle("Night Mode", isOn: $viewModel.isNightMode)
+                Toggle(isOn: $viewModel.isNightMode) {
+                    SettingsLabel("Night Mode", icon: "moon.fill", color: .indigo)
+                }
+                .toggleStyle(.switch)
             }
 
             Section("Now Playing") {
-                Picker("Idle timeout", selection: $viewModel.nowPlayingIdleTimeout) {
+                Picker(selection: $viewModel.nowPlayingIdleTimeout) {
                     Text("Never").tag(0)
                     Text("5 seconds").tag(5)
                     Text("15 seconds").tag(15)
                     Text("30 seconds").tag(30)
                     Text("1 minute").tag(60)
+                } label: {
+                    SettingsLabel("Idle timeout", icon: "timer", color: .orange)
                 }
             }
 
@@ -46,7 +51,11 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 400)
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
+        // No "Ecoute Settings" title or title bar; the form runs to the top.
+        .toolbar(removing: .title)
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     }
 
     // MARK: - Last.fm
@@ -55,34 +64,67 @@ struct SettingsView: View {
     private var lastFMContent: some View {
         if let username = viewModel.lastFMUsername {
             // Linked state
-            LabeledContent("Account") {
-                Text(username)
-                    .foregroundStyle(.secondary)
+            LabeledContent {
+                HStack(spacing: 8) {
+                    Text(username)
+                        .foregroundStyle(.secondary)
+                    Button("Unlink", role: .destructive) {
+                        viewModel.unlinkLastFM()
+                    }
+                }
+            } label: {
+                SettingsLabel("Account", icon: "person.crop.circle.fill", color: .red)
             }
-            Button("Unlink", role: .destructive) {
-                viewModel.unlinkLastFM()
-            }
-            .controlSize(.small)
         } else if viewModel.lastFMAuthPending {
             // Pending state
-            LabeledContent("Status") {
+            LabeledContent {
                 Text("Authorize in browser, then click Complete.")
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            } label: {
+                SettingsLabel("Status", icon: "person.crop.circle.fill", color: .red)
             }
             HStack(spacing: 8) {
-                Button("Complete Linking") { viewModel.completeLastFMAuth() }
+                Spacer()
                 Button("Cancel") { viewModel.unlinkLastFM() }
+                Button("Complete Linking") { viewModel.completeLastFMAuth() }
+                    .buttonStyle(.borderedProminent)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         } else {
             // Not linked state
-            LabeledContent("Status") {
-                Text("Not linked")
-                    .foregroundStyle(.secondary)
+            LabeledContent {
+                HStack(spacing: 8) {
+                    Text("Not linked")
+                        .foregroundStyle(.secondary)
+                    Button("Link Account…") { viewModel.startLastFMAuth() }
+                }
+            } label: {
+                SettingsLabel("Status", icon: "person.crop.circle.fill", color: .red)
             }
-            Button("Link Account…") { viewModel.startLastFMAuth() }
-                .controlSize(.small)
+        }
+    }
+}
+
+/// A row title with a System Settings–style colored icon tile.
+private struct SettingsLabel: View {
+    let title: String
+    let icon: String
+    let color: Color
+
+    init(_ title: String, icon: String, color: Color) {
+        self.title = title
+        self.icon = icon
+        self.color = color
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(color.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            Text(title)
         }
     }
 }
