@@ -1,0 +1,43 @@
+name: Mirror release to R2
+
+# Copies Ecoute.dmg from a published GitHub release to downloads.ecoutelabs.com:
+#   /<tag>/Ecoute.dmg  (permanent, per version)
+#   /Ecoute.dmg        (always the latest release; what the site links to)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to mirror (e.g. v1.1)
+        required: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      BUCKET: ecoute-downloads
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download DMG from release
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern Ecoute.dmg
+
+      - name: Upload versioned copy
+        run: >
+          npx -y wrangler@4 r2 object put "$BUCKET/$TAG/Ecoute.dmg" --remote
+          --file Ecoute.dmg
+          --content-type application/x-apple-diskimage
+          --cache-control "public, max-age=31536000, immutable"
+
+      - name: Upload as latest
+        # Skip prereleases so /Ecoute.dmg only ever points at a stable build.
+        if: ${{ !github.event.release.prerelease }}
+        run: >
+          npx -y wrangler@4 r2 object put "$BUCKET/Ecoute.dmg" --remote
+          --file Ecoute.dmg
+          --content-type application/x-apple-diskimage
+          --cache-control "public, max-age=300"

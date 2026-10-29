@@ -38,3 +38,6 @@ design/
 PLANNED_FEATURES.md
 background-renderer.md
 metal-background-plan.md
+
+# Local secrets
+.env
